@@ -1,0 +1,145 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the FAZUR platform.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "customer"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role", "createdAt"]
+    },
+    "Gig": {
+      "title": "Gig",
+      "description": "A service offered by Fazur.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "packages": {
+          "type": "object",
+          "properties": {
+            "basic": { "$ref": "GigPackage" },
+            "standard": { "$ref": "GigPackage" },
+            "premium": { "$ref": "GigPackage" }
+          }
+        },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "faqs": { "type": "array", "items": { "$ref": "FAQ" } },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "rating": { "type": "number" },
+            "reviewCount": { "type": "integer" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "category", "packages", "images", "createdAt"]
+    },
+    "GigPackage": {
+      "title": "GigPackage",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "deliveryTime": { "type": "integer" },
+        "features": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "FAQ": {
+      "title": "FAQ",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string" },
+        "answer": { "type": "string" }
+      }
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A service purchase by a customer.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "gigId": { "type": "string" },
+        "packageKey": { "type": "string", "enum": ["basic", "standard", "premium"] },
+        "price": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "in-progress", "delivered", "completed", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "gigId", "packageKey", "price", "status", "createdAt"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "A chat between admin and customer.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "unreadCount": { "type": "object" }
+      }
+    },
+    "Message": {
+      "title": "Message",
+      "description": "An individual chat message.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Customer feedback on a service.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "gigId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "rating": { "type": "integer" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/gigs/{gigId}": {
+      "schema": "Gig",
+      "description": "Marketplace service offerings"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Purchase records"
+    },
+    "/conversations/{convId}": {
+      "schema": "Conversation",
+      "description": "Chat conversations"
+    },
+    "/conversations/{convId}/messages/{msgId}": {
+      "schema": "Message",
+      "description": "Individual messages within a conversation"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Customer reviews"
+    }
+  }
+}

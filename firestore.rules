@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // 1. Users
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid == userId &&
+               data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+               data.email is string && data.email.size() <= 100 &&
+               data.role in ['admin', 'customer'] &&
+               data.createdAt is timestamp;
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().role == 'customer';
+      allow update: if isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().role == existing().role && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar']);
+    }
+
+    // 2. Gigs
+    match /gigs/{gigId} {
+      function isValidGig(data) {
+        return data.title is string && data.title.size() <= 200 &&
+               data.description is string && data.description.size() <= 5000 &&
+               data.category is string &&
+               data.packages is map &&
+               data.images is list && data.images.size() <= 10 &&
+               data.createdAt is timestamp;
+      }
+
+      allow read: if true;
+      allow create: if isAdmin() && isValidGig(incoming());
+      allow update: if isAdmin() && isValidGig(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 3. Orders
+    match /orders/{orderId} {
+      function isValidOrder(data) {
+        return data.customerId == request.auth.uid &&
+               data.gigId is string &&
+               data.packageKey in ['basic', 'standard', 'premium'] &&
+               data.price is number && data.price >= 0 &&
+               data.status in ['pending', 'in-progress', 'delivered', 'completed', 'cancelled'] &&
+               data.createdAt is timestamp;
+      }
+
+      allow get: if isSignedIn() && (isOwner(existing().customerId) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() && isValidOrder(incoming()) && 
+                    exists(/databases/$(database)/documents/gigs/$(incoming().gigId));
+      
+      allow update: if isSignedIn() && (
+        // Admin updates status
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'deliveredAt'])) ||
+        // Customer cancels or completes
+        (isOwner(existing().customerId) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+         incoming().status in ['cancelled', 'completed'])
+      );
+    }
+
+    // 4. Conversations
+    match /conversations/{convId} {
+      allow read: if isSignedIn() && (request.auth.uid in existing().participants);
+      
+      allow create: if isSignedIn() && (request.auth.uid in incoming().participants) &&
+                    (incoming().participants.size() == 2);
+      
+      allow update: if isSignedIn() && (request.auth.uid in existing().participants) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt', 'unreadCount']);
+      
+      // Messages Subcollection
+      match /messages/{msgId} {
+        allow read: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants);
+        allow create: if isSignedIn() && (request.auth.uid == incoming().senderId) && 
+                      (request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants) &&
+                      incoming().text is string && incoming().text.size() <= 10000;
+      }
+    }
+
+    // 5. Reviews
+    match /reviews/{reviewId} {
+      function isValidReview(data) {
+        return data.customerId == request.auth.uid &&
+               data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+               data.comment is string && data.comment.size() <= 2000;
+      }
+
+      allow read: if true;
+      allow create: if isSignedIn() && isValidReview(incoming()) &&
+                    get(/databases/$(database)/documents/orders/$(incoming().orderId)).data.status == 'completed' &&
+                    get(/databases/$(database)/documents/orders/$(incoming().orderId)).data.customerId == request.auth.uid;
+    }
+  }
+}
